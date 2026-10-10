@@ -1,7 +1,7 @@
 {
   "firestore": { "rules": "firestore.rules" },
   "hosting": {
-    "site": "proyek-e6ad1e02-5987-460a-990",
+    "site": "project-e6ad1e02-5987-460a-990",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "firestore.rules"],
     "headers": [
