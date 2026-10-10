@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101916" />
+    <meta name="description" content="Synthetic-only BFSI risk intelligence demonstration with evidence review." />
+    <title>RiskBrief — Evidence-led BFSI risk intelligence</title>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar"><a class="brand" href="#top" aria-label="RiskBrief home"><span class="brand-mark">R</span><span>RISKBRIEF</span><small>BFSI INTELLIGENCE DEMO</small></a><div id="provider-status" class="status" role="status">FIREBASE NOT CONFIGURED</div></header>
+      <main id="top">
+        <section class="hero">
+          <div class="eyebrow">SYNTHETIC DATA · HUMAN REVIEW · NO FINANCIAL DECISIONS</div>
+          <h1>See the evidence.<br /><em>Review the risk.</em></h1>
+          <p>RiskBrief turns a small synthetic portfolio snapshot into deterministic evidence. Gemini can select only findings already supported by that evidence. A reviewer makes the final decision.</p>
+          <div class="hero-meta"><span>01 / Deterministic</span><span>02 / AI-supported</span><span>03 / Human-reviewed</span></div>
+        </section>
+
+        <section class="notice" aria-label="Prototype limitation"><strong>Prototype boundary</strong><span>Illustrative synthetic data only. This browser demonstration does not perform credit decisions, fraud adjudication, lending, investing, or customer risk assessment.</span></section>
+
+        <section class="auth-panel card" aria-labelledby="auth-title">
+          <div><p class="eyebrow">ACCESS</p><h2 id="auth-title">Sign in to continue</h2><p class="muted">Accounts must be provisioned by the project owner. There is no public sign-up.</p></div>
+          <form id="login-form" class="login-form">
+            <label>Email <input id="email" type="email" autocomplete="username" required maxlength="254" /></label>
+            <label>Password <input id="password" type="password" autocomplete="current-password" required maxlength="256" /></label>
+            <button type="submit" id="login-button" class="button primary">Sign in</button>
+            <button type="button" id="logout-button" class="button secondary hidden">Sign out</button>
+            <p id="auth-message" class="message" role="status">Authentication is unavailable until Firebase is configured.</p>
+          </form>
+        </section>
+
+        <section id="workspace" class="workspace hidden" aria-labelledby="workspace-title">
+          <div class="section-heading"><div><p class="eyebrow">PRIVATE WORKSPACE</p><h2 id="workspace-title">Build a risk brief</h2></div><span id="role-badge" class="role-badge">ANALYST</span></div>
+          <div class="grid">
+            <article class="card input-card">
+              <div class="card-title"><span class="step">01</span><div><h3>Synthetic portfolio input</h3><p>Only the strict schema below is accepted.</p></div></div>
+              <label for="dataset">Dataset JSON <span class="label-note">SYNTHETIC_TEST_DATA only · max 8 segments</span></label>
+              <textarea id="dataset" spellcheck="false" maxlength="12000" aria-label="Synthetic dataset JSON"></textarea>
+              <div class="button-row"><button id="sample-button" type="button" class="button secondary">Load synthetic example</button><button id="analyze-button" type="button" class="button primary" disabled>Run deterministic analysis</button></div>
+            </article>
+            <article class="card result-card">
+              <div class="card-title"><span class="step">02</span><div><h3>Evidence</h3><p>Locally computed, reproducible thresholds.</p></div></div>
+              <div id="deterministic-result" class="empty">Submit an explicitly synthetic dataset to compute evidence.</div>
+            </article>
+          </div>
+          <article class="card ai-card">
+            <div class="card-title"><span class="step">03</span><div><h3>AI evidence selection</h3><p>Gemini returns structured evidence IDs and allowed codes only. The interface renders fixed text from validated evidence.</p></div></div>
+            <div class="ai-controls"><div><span class="small-label">MODEL</span><strong id="model-label">gemini-3.5-flash-lite</strong><span class="sim-label">AI response is not configured</span></div><button id="gemini-button" class="button dark" disabled>Generate AI-supported brief</button></div>
+            <div id="ai-result" class="empty">No model call has been made.</div>
+            <p class="cost-note">Cost and usage: UNKNOWN until a verified provider response reports usage. No estimate is presented as actual usage.</p>
+          </article>
+          <article class="card save-card">
+            <div class="card-title"><span class="step">04</span><div><h3>Save and review</h3><p>Saving requires a validated evidence selection. Reviewer status is separate from AI output.</p></div></div>
+            <div class="button-row"><button id="save-button" class="button primary" disabled>Save brief</button><span id="save-state" class="message" role="status">Nothing saved.</span></div>
+          </article>
+          <section class="card history-card" aria-labelledby="history-title"><div class="section-heading"><div><p class="eyebrow">FIRESTORE RECORDS</p><h2 id="history-title">Saved briefs</h2></div><button id="refresh-button" type="button" class="button secondary">Refresh</button></div><div id="brief-list" class="empty">Sign in with Firebase to view records.</div></section>
+          <section id="review-panel" class="card hidden" aria-labelledby="review-title"><div class="section-heading"><div><p class="eyebrow">HUMAN GOVERNANCE</p><h2 id="review-title">Reviewer queue</h2></div><span class="role-badge reviewer">REVIEWER</span></div><p class="muted">Only an account whose UID is pre-provisioned in the Firestore reviewers collection can approve or reject a pending brief.</p><div id="review-list" class="empty">No reviewer records loaded.</div></section>
+          <section class="card audit-card"><div class="section-heading"><div><p class="eyebrow">AUDIT EVENTS</p><h2>Recent activity</h2></div></div><div id="audit-list" class="empty">Audit events require an authenticated Firebase session.</div><p class="cost-note">Firestore rules prevent client edits/deletes. This browser-only event log is not a cryptographically chained or server-verified audit ledger.</p></section>
+        </section>
+
+        <section class="footer-note"><p><strong>What this demonstrates</strong> — deterministic synthetic findings, constrained Gemini evidence selection, client-side evidence validation, Firebase Authentication, Firestore rules, and human review workflow.</p><p><strong>What this does not claim</strong> — parity with the Python service's Argon2id sessions, server-side validation, SQLite triggers, idempotent transactions, hash-linked audit chain, backup/restore, or production controls.</p></section>
+      </main>
+      <footer><span>RISKBRIEF BFSI · AI BUILDER CUP DEMONSTRATION</span><span>NO REAL CUSTOMER OR FINANCIAL DATA</span></footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

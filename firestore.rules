@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isReviewer() {
+      return signedIn() && exists(/databases/$(database)/documents/reviewers/$(request.auth.uid));
+    }
+
+    // Reviewer membership must be provisioned through a trusted console workflow.
+    // There is intentionally no client write rule for this collection.
+    match /reviewers/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /briefs/{briefId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'createdByUid', 'createdAt', 'datasetLabel', 'inputHash',
+          'deterministic', 'ai', 'review'
+        ])
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.datasetLabel == 'SYNTHETIC_TEST_DATA'
+        && request.resource.data.inputHash is string
+        && request.resource.data.inputHash.matches('^[0-9a-f]{64}$')
+        && request.resource.data.deterministic is map
+        && request.resource.data.ai is map
+        && request.resource.data.review.status == 'PENDING';
+
+      allow get, list: if signedIn()
+        && (isReviewer() || resource.data.createdByUid == request.auth.uid);
+
+      allow update: if isReviewer()
+        && resource.data.review.status == 'PENDING'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['review'])
+        && request.resource.data.review.keys().hasOnly(['status', 'decisionByUid', 'decidedAt'])
+        && request.resource.data.review.status in ['APPROVED', 'REJECTED']
+        && request.resource.data.review.decisionByUid == request.auth.uid
+        && request.resource.data.review.decidedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /audit/{eventId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['actorUid', 'action', 'briefId', 'createdAt'])
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.action in ['BRIEF_SAVED', 'REVIEW_DECIDED']
+        && request.resource.data.createdAt == request.time;
+      allow read: if signedIn() && (isReviewer() || resource.data.actorUid == request.auth.uid);
+      allow update, delete: if false;
+    }
+  }
+}

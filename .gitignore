@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.firebase/
+.firebaserc
+*-debug.log
+*.sqlite
+*.sqlite3
+*.db
+.env
+.env.*
+!.env.example
+firebase-config.local.js
+coverage/
+playwright-report/
+test-results/
