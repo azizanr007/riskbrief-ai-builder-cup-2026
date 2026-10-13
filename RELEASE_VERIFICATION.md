@@ -55,3 +55,16 @@ Official pages checked October 13: registration closed October 11; team formatio
 - https://firebase.google.com/docs/projects/billing/firebase-pricing-plans
 - https://aibuildercup.com/
 - https://aibuildercup.com/themes.html
+
+## GitHub Actions no-cost CI checkpoint (2026-10-13)
+
+- **Pull request:** https://github.com/azizanr007/riskbrief-ai-builder-cup-2026/pull/2 (not merged at checkpoint).
+- **Actual GitHub Actions run:** https://github.com/azizanr007/riskbrief-ai-builder-cup-2026/actions/runs/38398191672 — **success**, standard `ubuntu-24.04` public-repository runner, with read-only GitHub permissions and no deployment credentials.
+- `npm ci`: success.
+- `npm test`: **10 passed, 0 failed**.
+- `npm run test:browser`: **6 passed, 0 failed** with real Chromium DOM and **mocked Firebase** SDK.
+- Local Firestore Emulator integration: **7 passed, 0 failed**. This tests rules in an emulator; rules are **not** confirmed published.
+- `npm run build`: **success**, explicit `VITE_FIREBASE_AI_LOGIC_ENABLED=false` in CI.
+- `npm audit --audit-level=high`: **0 vulnerabilities** reported.
+- **Cloud status remains blocked/unverified.** The account owner provided a Firebase Console screenshot showing **Spark** in the project sidebar, but no authenticated CLI/plugin verification of project ownership, linked billing, Auth providers, Firestore database, App Check enforcement, AI quota, or Hosting binding was obtained. A separate Work browser sign-in attempt was reported to fail with HTTP 502.
+- **No live Gemini request, billing activation, cloud deployment or real end-to-end cloud test was performed by this workflow.** CI success is not a submission-ready live demo.
