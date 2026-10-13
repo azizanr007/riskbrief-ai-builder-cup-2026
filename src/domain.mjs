@@ -75,7 +75,7 @@ export async function analyze(input) {
 }
 
 export function validateGeminiSelection(selection, evidence) {
-  if (!exactKeys(selection, ['findings', 'uncertaintyCodes']) || !Array.isArray(selection.findings) || selection.findings.length < 1 || selection.findings.length > 15 || !Array.isArray(selection.uncertaintyCodes) || selection.uncertaintyCodes.length < 1 || selection.uncertaintyCodes.length > 3) {
+  if (!exactKeys(selection, ['findings', 'uncertaintyCodes']) || !Array.isArray(selection.findings) || selection.findings.length < 1 || selection.findings.length > 15 || !Array.isArray(selection.uncertaintyCodes) || selection.uncertaintyCodes.length !== 3) {
     throw new Error('Gemini response does not match the expected structured schema.');
   }
   const byId = new Map(evidence.map(item => [item.id, item]));

@@ -45,9 +45,13 @@ The demo uses a small and bounded input schema, no raw uploads, no free-text use
 
 The hypothesis is that making source evidence and uncertainty visible can help a reviewer understand why an aggregate segment was flagged and distinguish a deterministic indicator from AI-generated selection. The prototype does not yet establish time savings, accuracy, fraud reduction, fairness, or financial benefit. A later controlled evaluation could measure evidence traceability, reviewer disagreement, decision time, unsupported-output rejection, and usability on synthetic or appropriately governed data, without using the demo for customer adjudication.
 
-## Current implementation status — 10 October 2026
+## Current implementation status — 13 October 2026
 
-The frozen Python v0.4 baseline was rechecked: 77 automated tests pass. A separate, independent JavaScript Firebase demo has been implemented with deterministic analysis, strict schema checks, constrained Firebase AI Logic integration, Firebase Authentication sign-in, Firestore rules, and reviewer flow. Its nine local domain/release-control tests, four Firestore Emulator rules tests, and static build pass. No Firebase project configuration, Firebase CLI login, App Check registration, hosted URL, or Gemini invocation was available in the working session. Therefore the cloud AI path is code-prepared but not yet exercised or deployed. No live Gemini result, public deployment, or production data is claimed.
+The frozen Python v0.4 baseline has 77 passing tests recorded on October 10; its original archive remains unchanged. The independent JavaScript Firebase demo now passes 10 domain/release-control tests, six real-Chromium UI tests with explicitly mocked services, and seven actual Firestore Emulator rule tests. Its production build also passes local HTTP/browser checks at desktop and mobile viewport widths, with no external requests or fixture code in the bundle. Release fixes address a missing response-status DOM element, inactive reviewer authority, account-transition state, superseded responses, and mandatory uncertainty labels.
+
+The source repository is public: https://github.com/azizanr007/riskbrief-ai-builder-cup-2026 . The owner reports an existing Firebase project and web app, but this execution environment has no authenticated Google/Firebase account. Spark/billing state, project ownership, App Check, actual free-tier quota and cloud services have not been verified. The configured target Hosting endpoint returned HTTP 404. No real Gemini response, production deployment, public demo video or official submission receipt exists yet. Local fixtures are never described as real model intelligence.
+
+Registration closed October 11. The official website checked on October 13 lists team formation through October 14 and prototype submission through October 18. Registered team membership/eligibility, the prescribed dashboard template, and submission status must be verified in the actual participant account.
 
 ## Competition category
 
