@@ -1,0 +1,65 @@
+name: RiskBrief no-cost verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: riskbrief-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Tests and static build (no cloud)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Set up Java 21 for Firestore Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify deterministic domain and release controls
+        run: npm test
+
+      - name: Install isolated Chromium for fixture browser tests
+        run: |
+          npx --no-install playwright-core install --with-deps chromium
+          echo "RISKBRIEF_CHROMIUM_PATH=$(node --input-type=module -e 'import { chromium } from "playwright-core"; console.log(chromium.executablePath())')" >> "$GITHUB_ENV"
+
+      - name: Verify Chromium UI flows (mock Firebase; not live Gemini)
+        run: npm run test:browser
+
+      - name: Verify actual Firestore rules in local emulator (not deployed)
+        run: npx --yes firebase-tools@15.33.0 emulators:exec --only firestore --project demo-riskbrief-rules "npm run test:rules"
+
+      - name: Build production static assets with AI disabled
+        env:
+          VITE_FIREBASE_AI_LOGIC_ENABLED: "false"
+        run: npm run build
+
+      - name: Dependency audit (high and critical advisories)
+        run: npm audit --audit-level=high
+
+# This workflow intentionally contains no cloud secrets, live AI requests,
+# deployment step, privileged permissions, or paid/larger runners.
