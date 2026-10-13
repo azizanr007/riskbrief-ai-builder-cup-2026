@@ -3,8 +3,13 @@
 const state = window.__riskbriefFixture = {
   records: new Map(), callbacks: [], uid: null, calls: 0, counter: 0,
   aiScenario: 'valid', roleLookupFails: false, delayed: false, appInitializations: 0,
+  googleUid: 'analyst-one', googleError: null, googleCalls: 0, emailError: false,
 };
 const reviewers = { 'trusted-reviewer': { active: true }, 'revoked-reviewer': { active: false } };
+const members = state.members = Object.fromEntries(
+  ['analyst-one', 'analyst-two', 'trusted-reviewer', 'revoked-reviewer'].map(uid => [uid, { active: true }]),
+);
+members['revoked-member'] = { active: false };
 const timestamp = () => ({ toDate: () => new Date(0), toMillis: () => 0 });
 const snapshot = path => ({ id: path.split('/').at(-1), exists: () => state.records.has(path), data: () => state.records.get(path) });
 
@@ -29,6 +34,17 @@ export function getGenerativeModel(_ai, params, options) {
   } };
 }
 export const getAuth = () => state;
+export const browserSessionPersistence = { type: 'SESSION' };
+export const setPersistence = async (_auth, persistence) => { state.persistence = persistence.type; };
+export class GoogleAuthProvider {
+  setCustomParameters(params) { this.parameters = params; }
+}
+export const signInWithPopup = async (_auth, provider) => {
+  state.googleCalls++;
+  state.googleParameters = provider.parameters;
+  if (state.googleError) throw new Error(state.googleError);
+  await notify(state.googleUid);
+};
 export function onAuthStateChanged(_auth, callback) {
   state.callbacks.push(callback);
   queueMicrotask(() => callback(null));
@@ -38,7 +54,10 @@ async function notify(uid) {
   state.uid = uid;
   await Promise.all(state.callbacks.map(callback => callback(uid ? { uid } : null)));
 }
-export const signInWithEmailAndPassword = async (_auth, email) => { await notify(email.split('@')[0]); };
+export const signInWithEmailAndPassword = async (_auth, email) => {
+  if (state.emailError) throw new Error('Fixture credential failure');
+  await notify(email.split('@')[0]);
+};
 export const signOut = async () => { await notify(null); };
 
 export const getFirestore = () => ({});
@@ -51,6 +70,11 @@ export function doc(base, name, id) {
   return { path: name + '/' + id, id };
 }
 export async function getDoc(ref) {
+  if (ref.path.startsWith('members/')) {
+    if (state.roleLookupFails) throw new Error('Fixture membership permission failure');
+    const data = members[ref.id];
+    return { exists: () => Boolean(data), data: () => data };
+  }
   if (ref.path.startsWith('reviewers/')) {
     if (state.roleLookupFails) throw new Error('Fixture permission failure');
     const data = reviewers[ref.id];
@@ -58,6 +82,7 @@ export async function getDoc(ref) {
   }
   return snapshot(ref.path);
 }
+export const getDocFromServer = getDoc;
 export const where = (key, op, value) => ({ key, op, value });
 export const orderBy = () => ({});
 export const limit = count => ({ count });

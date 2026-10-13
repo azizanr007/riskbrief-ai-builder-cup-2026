@@ -21,11 +21,12 @@
         <section class="notice" aria-label="Prototype limitation"><strong>Prototype boundary</strong><span>Illustrative synthetic data only. This browser demonstration does not perform credit decisions, fraud adjudication, lending, investing, or customer risk assessment.</span></section>
 
         <section class="auth-panel card" aria-labelledby="auth-title">
-          <div><p class="eyebrow">ACCESS</p><h2 id="auth-title">Sign in to continue</h2><p class="muted">Accounts must be provisioned by the project owner. There is no public sign-up.</p></div>
+          <div><p class="eyebrow">ACCESS</p><h2 id="auth-title">Sign in to continue</h2><p class="muted">Use Email/password or Google. Workspace membership must be approved by the project owner. There is no public sign-up form. Google may create an authentication identity; it does not grant workspace access.</p></div>
           <form id="login-form" class="login-form">
             <label>Email <input id="email" type="email" autocomplete="username" required maxlength="254" /></label>
             <label>Password <input id="password" type="password" autocomplete="current-password" required maxlength="256" /></label>
-            <button type="submit" id="login-button" class="button primary">Sign in</button>
+            <button type="submit" id="login-button" class="button primary" disabled>Sign in with email</button>
+            <button type="button" id="google-button" class="button secondary" disabled>Continue with Google</button>
             <button type="button" id="logout-button" class="button secondary hidden">Sign out</button>
             <p id="auth-message" class="message" role="status">Authentication is unavailable until Firebase is configured.</p>
           </form>

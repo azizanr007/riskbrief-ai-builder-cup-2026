@@ -8,7 +8,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/domain.test.mjs tests/release-controls.test.mjs",
     "test:rules": "node --test tests/firestore-rules.test.mjs",
-    "test:browser": "node --test tests/browser-flow.test.mjs"
+    "test:browser": "node --test tests/browser-flow.test.mjs",
+    "test:auth": "node --test tests/firebase-auth.test.mjs"
   },
   "dependencies": {
     "firebase": "13.0.0"

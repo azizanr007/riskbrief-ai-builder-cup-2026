@@ -155,6 +155,7 @@ test('unconfigured app remains inert and the mobile page has no horizontal overf
   const page = await open(t, urlFor(inertServer), true);
   await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('configuration is missing'));
   assert.equal(await page.locator('#login-button').isDisabled(), true);
+  assert.equal(await page.locator('#google-button').isDisabled(), true);
   assert.equal(await page.locator('#workspace').isVisible(), false);
   assert.equal(await page.locator('#provider-status').textContent(), 'FIREBASE NOT CONFIGURED');
   assert.equal(await page.evaluate(() => window.__riskbriefFixture.appInitializations), 0);
@@ -165,4 +166,114 @@ test('unconfigured app remains inert and the mobile page has no horizontal overf
   assert.equal(await active.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.equal(await active.locator('#analyze-button').evaluate(button => button.getBoundingClientRect().height >= 40), true);
   assert.deepEqual(errors, []);
+});
+
+test('approved Google analyst signs in on mobile without submitting email/password', { timeout: 30000 }, async t => {
+  const page = await open(t, baseUrl, true);
+  await page.locator('#google-button').click();
+  await analyze(page);
+  assert.equal(await page.locator('#role-badge').textContent(), 'ANALYST');
+  assert.equal(await page.locator('#review-panel').isVisible(), false);
+  assert.equal(await page.locator('#password').inputValue(), '');
+  assert.equal(await page.evaluate(() => window.__riskbriefFixture.persistence), 'SESSION');
+  assert.deepEqual(await page.evaluate(() => window.__riskbriefFixture.googleParameters), { prompt: 'select_account' });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.locator('#logout-button').click();
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  assert.equal(await page.locator('#google-button').isVisible(), true);
+});
+
+test('Google reviewer needs approved membership and active reviewer record', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  await page.evaluate(() => { window.__riskbriefFixture.googleUid = 'trusted-reviewer'; });
+  await page.locator('#google-button').click();
+  await page.locator('#review-panel').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#role-badge').textContent(), 'REVIEWER');
+  await page.locator('#logout-button').click();
+  await page.evaluate(() => { window.__riskbriefFixture.members['trusted-reviewer'].active = false; });
+  await page.locator('#google-button').click();
+  await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('owner-approved'));
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  assert.equal(await page.locator('#review-panel').isVisible(), false);
+});
+
+test('new Google account and browser role flags never grant workspace access', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  await page.evaluate(() => {
+    window.__riskbriefFixture.googleUid = 'unapproved-google';
+    window.role = 'REVIEWER';
+    localStorage.setItem('role', 'REVIEWER');
+    document.querySelector('#role-badge').textContent = 'REVIEWER';
+  });
+  await page.locator('#google-button').click();
+  await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('owner-approved'));
+  assert.equal(await page.locator('#role-badge').textContent(), 'UNVERIFIED');
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  assert.equal(await page.locator('#gemini-button').isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.__riskbriefFixture.calls), 0);
+  assert.equal(await page.evaluate(() => window.__riskbriefFixture.records.size), 0);
+});
+
+test('inactive email account is authenticated but cannot open private workspace', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  await login(page, 'revoked-member');
+  await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('owner-approved'));
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  assert.equal(await page.locator('#logout-button').isVisible(), true);
+  assert.equal(await page.evaluate(() => window.__riskbriefFixture.calls), 0);
+});
+
+test('cancelled, blocked or failed Google popup shows a safe error and permits retry', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  for (const code of ['auth/popup-closed-by-user', 'auth/popup-blocked', 'auth/unauthorized-domain']) {
+    await page.evaluate(value => { window.__riskbriefFixture.googleError = value; }, code);
+    await page.locator('#google-button').click();
+    await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('could not be completed'));
+    assert.equal(await page.locator('#workspace').isVisible(), false);
+    assert.equal(await page.locator('#google-button').isDisabled(), false);
+    assert.doesNotMatch(await page.locator('#auth-message').textContent(), /auth\/|stack|token/);
+  }
+  await page.evaluate(() => { window.__riskbriefFixture.googleError = null; });
+  await page.locator('#google-button').click();
+  await page.locator('#workspace').waitFor({ state: 'visible' });
+});
+
+test('membership revoked after login blocks the next model request without invoking the provider', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  await login(page, 'analyst-one');
+  await analyze(page);
+  await page.evaluate(() => { window.__riskbriefFixture.members['analyst-one'].active = false; });
+  await page.locator('#gemini-button').click();
+  await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('owner-approved'));
+  assert.equal(await page.evaluate(() => window.__riskbriefFixture.calls), 0);
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  assert.equal(await page.locator('#save-button').isDisabled(), true);
+});
+
+test('failed email login clears password and never reports an authenticated workspace', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  await page.evaluate(() => { window.__riskbriefFixture.emailError = true; });
+  await login(page, 'analyst-one');
+  await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('Sign-in failed'));
+  assert.equal(await page.locator('#password').inputValue(), '');
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  assert.equal(await page.locator('#login-button').isDisabled(), false);
+});
+
+test('pending model response is discarded when email login switches to Google', { timeout: 30000 }, async t => {
+  const page = await open(t);
+  await login(page, 'analyst-one');
+  await analyze(page);
+  await page.evaluate(() => { window.__riskbriefFixture.delayed = true; });
+  await page.locator('#gemini-button').click();
+  await page.waitForFunction(() => typeof window.__riskbriefFixture.resolveModel === 'function');
+  await page.locator('#logout-button').click();
+  await page.evaluate(() => { window.__riskbriefFixture.googleUid = 'trusted-reviewer'; });
+  await page.locator('#google-button').click();
+  await page.locator('#review-panel').waitFor({ state: 'visible' });
+  await page.evaluate(() => window.__riskbriefFixture.resolveModel());
+  await page.waitForFunction(() => !document.querySelector('#analyze-button').disabled);
+  assert.equal(await page.locator('#save-button').isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.__riskbriefFixture.records.size), 0);
+  assert.match(await page.locator('#ai-result').textContent(), /No model call/);
 });

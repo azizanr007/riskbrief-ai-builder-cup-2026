@@ -1,60 +1,131 @@
 rules_version = '2';
+// ===============================================================
+// Assumed Data Model (private synthetic demonstration; prototype rules)
+// ===============================================================
+// members/{uid}: trusted-admin allowlist with active:true; client immutable.
+// reviewers/{uid}: additional trusted-admin role with active:true; client immutable.
+// ACL documents can contain private administrative metadata. Only the subject
+// may get their own document, including to establish missing/revoked access.
+// briefs/{briefId}: required createdByUid (Auth UID), createdAt (timestamp),
+// datasetLabel (SYNTHETIC_TEST_DATA), inputHash (64 lowercase hex characters),
+// deterministic (bounded evidence), ai (bounded selection/nullable usage),
+// review (PENDING/APPROVED/REJECTED). Only review can change, once, by reviewer.
+// audit/{eventId}: actorUid, action (BRIEF_SAVED/REVIEW_DECIDED), briefId,
+// createdAt timestamp. Append-only, linked to the matching brief operation.
+// The browser's own-record/reviewer queries use limit(20). Rules validate shape
+// and top-level bounds, not nested evidence/finding values, deterministic
+// arithmetic or authentic provider responses. Nested content is checked in the
+// application; bypassable browser validation is not trusted server verification.
+// Keeping this boundary explicit avoids exceeding the rules 1000-expression
+// limit by unrolling full evidence/model validators.
+// Admin SDK/console bypass rules; provision ACLs only through trusted access.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isReviewer() {
+    function isMember() {
       return signedIn()
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.active == true;
+    }
+    function isReviewer() {
+      return isMember()
         && exists(/databases/$(database)/documents/reviewers/$(request.auth.uid))
         && get(/databases/$(database)/documents/reviewers/$(request.auth.uid)).data.active == true;
     }
-
-    // Reviewer membership must be provisioned through a trusted console workflow.
-    // There is intentionally no client write rule for this collection.
-    match /reviewers/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if false;
+    function exactFields(data, fields) {
+      let keys = data.keys();
+      return data is map && keys.hasOnly(fields);
     }
+    function validUid(uid) { return uid is string && uid.size() > 0 && uid.size() <= 128; }
+    function isValidDeterministic(raw) {
+      let data = raw;
+      return exactFields(data, ['totalExposure', 'thresholdVersion', 'evidence'])
+        && data.totalExposure is int && data.totalExposure >= 1 && data.totalExposure <= 8000000000
+        && data.thresholdVersion == 'riskbrief-demo-thresholds-v1'
+        && data.evidence is list && data.evidence.size() >= 2 && data.evidence.size() <= 8;
+    }
+    function isValidSelection(raw) {
+      let data = raw;
+      return exactFields(data, ['findings', 'uncertaintyCodes'])
+        && data.findings is list && data.findings.size() >= 1 && data.findings.size() <= 15
+        && data.uncertaintyCodes is list && data.uncertaintyCodes.size() == 3
+        && data.uncertaintyCodes.hasAll(['SYNTHETIC_ONLY', 'UNCALIBRATED', 'ANALYST_REVIEW_REQUIRED'])
+        && data.uncertaintyCodes.hasOnly(['SYNTHETIC_ONLY', 'UNCALIBRATED', 'ANALYST_REVIEW_REQUIRED']);
+    }
+    function isValidUsage(raw) {
+      let data = raw;
+      return data == null || (exactFields(data, ['promptTokenCount', 'candidatesTokenCount', 'totalTokenCount'])
+        && (data.promptTokenCount == null || (data.promptTokenCount is int && data.promptTokenCount >= 0 && data.promptTokenCount <= 1000000))
+        && (data.candidatesTokenCount == null || (data.candidatesTokenCount is int && data.candidatesTokenCount >= 0 && data.candidatesTokenCount <= 1000000))
+        && (data.totalTokenCount == null || (data.totalTokenCount is int && data.totalTokenCount >= 0 && data.totalTokenCount <= 1000000)));
+    }
+    function isValidAI(raw) {
+      let data = raw;
+      return exactFields(data, ['provider', 'model', 'selection', 'usage'])
+        && data.provider == 'Firebase AI Logic / Gemini Developer API'
+        && data.model is string && data.model.size() >= 1 && data.model.size() <= 100
+        && isValidSelection(data.selection) && isValidUsage(data.usage);
+    }
+    function isValidReview(raw) {
+      let data = raw;
+      return exactFields(data, ['status', 'decisionByUid', 'decidedAt'])
+        && ((data.status == 'PENDING' && data.decisionByUid == null && data.decidedAt == null)
+          || (data.status in ['APPROVED', 'REJECTED'] && validUid(data.decisionByUid) && data.decidedAt is timestamp));
+    }
+    function isValidBrief(raw) {
+      let data = raw;
+      return exactFields(data, ['createdByUid', 'createdAt', 'datasetLabel', 'inputHash', 'deterministic', 'ai', 'review'])
+        && validUid(data.createdByUid) && data.createdAt is timestamp
+        && data.datasetLabel == 'SYNTHETIC_TEST_DATA'
+        && data.inputHash is string && data.inputHash.matches('^[0-9a-f]{64}$')
+        && isValidDeterministic(data.deterministic) && isValidAI(data.ai) && isValidReview(data.review);
+    }
+    function isValidAudit(raw) {
+      let data = raw;
+      return exactFields(data, ['actorUid', 'action', 'briefId', 'createdAt'])
+        && validUid(data.actorUid) && data.actorUid == request.auth.uid
+        && data.action in ['BRIEF_SAVED', 'REVIEW_DECIDED']
+        && data.briefId is string && data.briefId.matches('^[a-zA-Z0-9_-]{1,128}$')
+        && data.createdAt is timestamp && data.createdAt == request.time;
+    }
+    function matchingAuditAction(data) {
+      let brief = getAfter(/databases/$(database)/documents/briefs/$(data.briefId)).data;
+      return (data.action == 'BRIEF_SAVED' && brief.createdByUid == request.auth.uid && brief.createdAt == request.time)
+        || (data.action == 'REVIEW_DECIDED' && isReviewer()
+          && brief.review.status in ['APPROVED', 'REJECTED']
+          && brief.review.decisionByUid == request.auth.uid && brief.review.decidedAt == request.time);
+    }
+    function boundedQuery() { return request.query.limit != null && request.query.limit <= 20; }
 
+    match /members/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+    match /reviewers/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
     match /briefs/{briefId} {
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly([
-          'createdByUid', 'createdAt', 'datasetLabel', 'inputHash',
-          'deterministic', 'ai', 'review'
-        ])
+      allow create: if isMember() && isValidBrief(request.resource.data)
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.createdAt == request.time
-        && request.resource.data.datasetLabel == 'SYNTHETIC_TEST_DATA'
-        && request.resource.data.inputHash is string
-        && request.resource.data.inputHash.matches('^[0-9a-f]{64}$')
-        && request.resource.data.deterministic is map
-        && request.resource.data.ai is map
-        && request.resource.data.review.keys().hasOnly(['status', 'decisionByUid', 'decidedAt'])
-        && request.resource.data.review.status == 'PENDING'
-        && request.resource.data.review.decisionByUid == null
-        && request.resource.data.review.decidedAt == null;
-
-      allow get, list: if signedIn()
-        && (isReviewer() || resource.data.createdByUid == request.auth.uid);
-
-      allow update: if isReviewer()
+        && request.resource.data.review.status == 'PENDING';
+      allow get: if isMember() && (isReviewer() || resource.data.createdByUid == request.auth.uid);
+      allow list: if isMember() && boundedQuery() && (isReviewer() || resource.data.createdByUid == request.auth.uid);
+      allow update: if isReviewer() && isValidBrief(request.resource.data)
         && resource.data.review.status == 'PENDING'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['review'])
-        && request.resource.data.review.keys().hasOnly(['status', 'decisionByUid', 'decidedAt'])
         && request.resource.data.review.status in ['APPROVED', 'REJECTED']
         && request.resource.data.review.decisionByUid == request.auth.uid
         && request.resource.data.review.decidedAt == request.time;
-
       allow delete: if false;
     }
-
     match /audit/{eventId} {
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['actorUid', 'action', 'briefId', 'createdAt'])
-        && request.resource.data.actorUid == request.auth.uid
-        && request.resource.data.action in ['BRIEF_SAVED', 'REVIEW_DECIDED']
-        && request.resource.data.createdAt == request.time;
-      allow read: if signedIn() && (isReviewer() || resource.data.actorUid == request.auth.uid);
+      allow create: if isMember() && isValidAudit(request.resource.data) && matchingAuditAction(request.resource.data);
+      allow get: if isMember() && (isReviewer() || resource.data.actorUid == request.auth.uid);
+      allow list: if isMember() && boundedQuery() && (isReviewer() || resource.data.actorUid == request.auth.uid);
       allow update, delete: if false;
     }
+    match /{document=**} { allow read, write: if false; }
   }
 }

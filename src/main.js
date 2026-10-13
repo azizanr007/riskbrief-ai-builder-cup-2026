@@ -3,9 +3,12 @@ import { analyze, sampleDataset, validateDataset, validateGeminiSelection, rende
 import { initializeApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'firebase/ai';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
-  collection, doc, getDoc, getDocs, getFirestore, limit, orderBy,
+  browserSessionPersistence, getAuth, GoogleAuthProvider, onAuthStateChanged,
+  setPersistence, signInWithEmailAndPassword, signInWithPopup, signOut,
+} from 'firebase/auth';
+import {
+  collection, doc, getDocFromServer, getDocs, getFirestore, limit, orderBy,
   query, runTransaction, serverTimestamp, where, writeBatch,
 } from 'firebase/firestore';
 
@@ -26,6 +29,8 @@ let app = null;
 let auth = null;
 let db = null;
 let model = null;
+let authReady = false;
+let authBusy = false;
 let currentUser = null;
 let currentRole = 'UNVERIFIED';
 let accessVerified = false;
@@ -60,6 +65,63 @@ function syncControls() {
   $('save-button').disabled = !usable || !currentSelection || !currentNarrative || modelBusy;
 }
 
+function syncAuthControls() {
+  const signedIn = Boolean(currentUser);
+  for (const id of ['login-button', 'google-button']) {
+    $(id).disabled = !authReady || authBusy || signedIn;
+    $(id).classList.toggle('hidden', signedIn);
+  }
+  $('email').disabled = !authReady || authBusy || signedIn;
+  $('password').disabled = !authReady || authBusy || signedIn;
+  $('logout-button').disabled = !authReady || authBusy || !signedIn;
+  $('logout-button').classList.toggle('hidden', !signedIn);
+}
+
+function clearWorkspace() {
+  currentRole = 'UNVERIFIED';
+  accessVerified = false;
+  resetAnalysis();
+  $('dataset').value = '';
+  $('role-badge').textContent = 'UNVERIFIED';
+  $('workspace').classList.add('hidden');
+  $('review-panel').classList.add('hidden');
+  $('review-list').textContent = 'No reviewer records loaded.';
+  $('brief-list').textContent = 'Sign in with Firebase to view records.';
+  $('audit-list').textContent = 'Audit events require an authenticated Firebase session.';
+}
+
+async function verifyWorkspaceAccess() {
+  if (!authReady || !currentUser || !db) return false;
+  const version = sessionVersion;
+  const uid = currentUser.uid;
+  try {
+    // Never authorize from an offline cached role, a Google email, or browser flags.
+    const [member, reviewer] = await Promise.all([
+      getDocFromServer(doc(db, 'members', uid)),
+      getDocFromServer(doc(db, 'reviewers', uid)),
+    ]);
+    if (version !== sessionVersion) return false;
+    if (!member.exists() || member.data().active !== true) {
+      ++sessionVersion;
+      clearWorkspace();
+      setMessage(authMessage, 'Authenticated, but owner-approved workspace access is required.', true);
+      return false;
+    }
+    currentRole = reviewer.exists() && reviewer.data().active === true ? 'REVIEWER' : 'ANALYST';
+    accessVerified = true;
+    $('role-badge').textContent = currentRole;
+    $('review-panel').classList.toggle('hidden', currentRole !== 'REVIEWER');
+    syncControls();
+    return true;
+  } catch {
+    if (version !== sessionVersion) return false;
+    ++sessionVersion;
+    clearWorkspace();
+    setMessage(authMessage, 'Signed in, but role or Firestore access could not be verified.', true);
+    return false;
+  }
+}
+
 function make(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -67,17 +129,19 @@ function make(tag, className, text) {
   return node;
 }
 
-function setupFirebase() {
+async function setupFirebase() {
   if (!firebaseConfigured) {
     setProviderState('FIREBASE NOT CONFIGURED');
     setMessage(authMessage, 'Firebase configuration is missing. Sign-in, persistence, and AI are disabled.');
-    $('login-button').disabled = true;
+    syncAuthControls();
     return;
   }
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+    // Shared-device friendly: the official SDK retains login only for this tab session.
+    await setPersistence(auth, browserSessionPersistence);
     if (siteKey && !siteKey.startsWith('REPLACE_')) {
       initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(siteKey), isTokenAutoRefreshEnabled: true });
     }
@@ -104,50 +168,30 @@ function setupFirebase() {
     setProviderState(aiEnabled ? 'FIREBASE CONFIGURED · AI NOT YET VERIFIED' : 'FIREBASE CONFIGURED · AI DISABLED');
     setMessage(authMessage, 'Sign in with an owner-provisioned Firebase Authentication account.');
     $('model-label').textContent = MODEL_NAME;
+    authReady = true;
+    syncAuthControls();
     onAuthStateChanged(auth, async user => {
       const version = ++sessionVersion;
       currentUser = user;
-      currentRole = 'UNVERIFIED';
-      accessVerified = false;
-      resetAnalysis();
-      $('dataset').value = '';
-      $('role-badge').textContent = 'UNVERIFIED';
-      $('workspace').classList.add('hidden');
-      $('review-panel').classList.add('hidden');
-      $('review-list').textContent = 'No reviewer records loaded.';
-      $('brief-list').textContent = 'Sign in with Firebase to view records.';
-      $('audit-list').textContent = 'Audit events require an authenticated Firebase session.';
+      clearWorkspace();
+      syncAuthControls();
       if (!user) {
-        $('login-button').classList.remove('hidden');
-        $('logout-button').classList.add('hidden');
-        setMessage(authMessage, 'Signed out. No public registration is available.');
+        setMessage(authMessage, 'Signed out. Workspace access requires owner approval.');
         return;
       }
-      $('login-button').classList.add('hidden');
-      $('logout-button').classList.remove('hidden');
       setMessage(authMessage, 'Signed in. Verifying workspace access…');
-      try {
-        const reviewerRecord = await getDoc(doc(db, 'reviewers', user.uid));
-        if (version !== sessionVersion) return;
-        currentRole = reviewerRecord.exists() && reviewerRecord.data().active === true ? 'REVIEWER' : 'ANALYST';
-        accessVerified = true;
-        $('role-badge').textContent = currentRole;
-        $('review-panel').classList.toggle('hidden', currentRole !== 'REVIEWER');
-        $('workspace').classList.remove('hidden');
-        $('dataset').value = JSON.stringify(sampleDataset(), null, 2);
-        syncControls();
-        await refreshRecords();
-      } catch {
-        if (version !== sessionVersion) return;
-        setMessage(authMessage, 'Signed in, but role or Firestore access could not be verified.', true);
-        return;
-      }
+      if (!await verifyWorkspaceAccess() || version !== sessionVersion) return;
+      $('workspace').classList.remove('hidden');
+      $('dataset').value = JSON.stringify(sampleDataset(), null, 2);
+      syncControls();
+      await refreshRecords();
       if (version === sessionVersion) setMessage(authMessage, 'Signed in. Role: ' + currentRole + '.');
     });
   } catch {
+    authReady = false;
     setProviderState('FIREBASE CONFIGURATION ERROR');
     setMessage(authMessage, 'Firebase setup could not be initialized. Check project configuration and service setup.', true);
-    $('login-button').disabled = true;
+    syncAuthControls();
   }
 }
 
@@ -207,6 +251,7 @@ $('sample-button').addEventListener('click', () => {
 
 $('analyze-button').addEventListener('click', async () => {
   if (!accessVerified || !currentUser || modelBusy) return;
+  if (!await verifyWorkspaceAccess() || modelBusy) return;
   resetAnalysis();
   const version = analysisVersion;
   const accountVersion = sessionVersion;
@@ -226,6 +271,7 @@ $('analyze-button').addEventListener('click', async () => {
 
 $('gemini-button').addEventListener('click', async () => {
   if (!accessVerified || !currentUser || !model || !currentAnalysis || modelBusy) return;
+  if (!await verifyWorkspaceAccess() || !currentAnalysis || modelBusy) return;
   const version = sessionVersion;
   const requestedAnalysis = currentAnalysis;
   const requestIsCurrent = () => version === sessionVersion && requestedAnalysis === currentAnalysis && accessVerified;
@@ -265,6 +311,7 @@ $('gemini-button').addEventListener('click', async () => {
 
 $('save-button').addEventListener('click', async () => {
   if (!accessVerified || !currentUser || !db || !currentAnalysis || !currentSelection || !currentNarrative || modelBusy) return;
+  if (!await verifyWorkspaceAccess() || !currentAnalysis || !currentSelection || !currentNarrative || modelBusy) return;
   const version = sessionVersion;
   $('save-button').disabled = true;
   try {
@@ -294,8 +341,9 @@ $('save-button').addEventListener('click', async () => {
 
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!auth) return;
-  $('login-button').disabled = true;
+  if (!authReady || authBusy || currentUser) return;
+  authBusy = true;
+  syncAuthControls();
   try {
     await signInWithEmailAndPassword(auth, $('email').value.trim(), $('password').value);
     $('password').value = '';
@@ -303,13 +351,36 @@ $('login-form').addEventListener('submit', async event => {
     $('password').value = '';
     setMessage(authMessage, 'Sign-in failed. Check the account or try again later.', true);
   } finally {
-    $('login-button').disabled = false;
+    authBusy = false;
+    syncAuthControls();
+  }
+});
+
+$('google-button').addEventListener('click', async () => {
+  if (!authReady || authBusy || currentUser) return;
+  authBusy = true;
+  syncAuthControls();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    // Start from the tap handler so mobile browsers can open the official auth popup.
+    // Do not extract, log, store manually, or display Google OAuth credentials.
+    await signInWithPopup(auth, provider);
+  } catch {
+    setMessage(authMessage, 'Google sign-in could not be completed. Allow the sign-in window or try again later.', true);
+  } finally {
+    $('password').value = '';
+    authBusy = false;
+    syncAuthControls();
   }
 });
 
 $('logout-button').addEventListener('click', async () => {
-  if (!auth) return;
+  if (!authReady || authBusy) return;
+  authBusy = true;
+  syncAuthControls();
   try { await signOut(auth); } catch { setMessage(authMessage, 'Sign-out could not be completed.', true); }
+  finally { authBusy = false; syncAuthControls(); }
 });
 
 $('refresh-button').addEventListener('click', () => refreshRecords());
@@ -321,6 +392,7 @@ function createdAtLabel(value) {
 
 async function refreshRecords() {
   if (!accessVerified || !currentUser || !db) return;
+  if (!await verifyWorkspaceAccess()) return;
   const version = sessionVersion;
   const uid = currentUser.uid;
   const role = currentRole;
@@ -375,6 +447,7 @@ function makeReviewButtons(briefId) {
 
 async function decideReview(briefId, status, button) {
   if (!accessVerified || currentRole !== 'REVIEWER' || !currentUser || !db) return;
+  if (!await verifyWorkspaceAccess() || currentRole !== 'REVIEWER') return;
   const version = sessionVersion;
   const uid = currentUser.uid;
   button.disabled = true;

@@ -27,9 +27,10 @@ test('only login is offered and role information comes from an immutable reviewe
   const rules = await read('../firestore.rules');
   assert.match(html, /There is no public sign-up/);
   assert.doesNotMatch(app, /createUserWithEmailAndPassword/);
-  assert.match(app, /getDoc\(doc\(db, 'reviewers', user\.uid\)\)/);
+  assert.match(app, /getDocFromServer\(doc\(db, 'members', uid\)\)/);
+  assert.match(app, /getDocFromServer\(doc\(db, 'reviewers', uid\)\)/);
   assert.match(rules, /match \/reviewers\/{uid}/);
-  assert.match(rules, /allow write: if false/);
+  assert.match(rules, /allow list, create, update, delete: if false/);
 });
 
 test('Firestore rules isolate owner data and constrain reviewer decisions', async () => {

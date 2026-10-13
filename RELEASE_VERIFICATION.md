@@ -55,3 +55,28 @@ Official pages checked October 13: registration closed October 11; team formatio
 - https://firebase.google.com/docs/projects/billing/firebase-pricing-plans
 - https://aibuildercup.com/
 - https://aibuildercup.com/themes.html
+
+## Subsequent Authentication/Firestore setup checkpoint
+
+The later owner instruction explicitly supplies project
+`project-e6ad1e02-5987-460a-990` and Web app
+`1:1010925225176:web:36cb756f6c0926c5d303ad`; this supersedes the earlier
+`proyek-...` target. Historical checks above retain their original target and
+are not evidence of this project's ownership or access.
+
+Official Firebase agent skills were installed and read for CLI, Authentication,
+Firestore, rules and static Hosting. Email/password and Google popup sign-in,
+SDK tab-session persistence, trusted active workspace membership, server ACL
+checks and stricter private Firestore rules are now implemented. Final local
+checks: **10 unit/control + 14 fixture-browser + 19 Firestore emulator + 4 Auth
+emulator = 47 passed, 0 failed, 0 skipped**. Build, production HTTP/mobile viewport
+smoke and dependency audit passed; application advisory count remains zero.
+Earlier oversized nested rule validation attempts failed and were corrected;
+the final rules' nested-data validation boundary is explicitly documented and
+tested. Google emulator fixtures are not genuine Google verification.
+
+Live CLI still reports zero authorized accounts and projects access fails with
+authentication required. No production Firebase data, Auth users, rules,
+services, deployment or billing were changed. Full evidence, exact reproducible
+commands, limitations and the next authenticated checks are recorded in
+[FIREBASE_SETUP_STATUS.md](FIREBASE_SETUP_STATUS.md).
