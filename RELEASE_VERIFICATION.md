@@ -80,3 +80,11 @@ authentication required. No production Firebase data, Auth users, rules,
 services, deployment or billing were changed. Full evidence, exact reproducible
 commands, limitations and the next authenticated checks are recorded in
 [FIREBASE_SETUP_STATUS.md](FIREBASE_SETUP_STATUS.md).
+
+October 14 follow-up: AI Logic limited-use App Check tokens and isolated AI
+initialization failures were implemented and tested. Final actual regressions:
+10 unit/control + 15 fixture-browser + 19 Firestore emulator + 4 Auth emulator
+= **48 passed, 0 failed, 0 skipped**. Production build/HTTP viewport smoke passed
+and app dependency audit remained zero. The owner reports Developer API VALID;
+real inference remains unverified because workspace Google auth/configuration
+is missing. See [GEMINI_INTEGRATION_CHECK.md](GEMINI_INTEGRATION_CHECK.md).

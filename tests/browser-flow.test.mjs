@@ -39,10 +39,11 @@ before(async () => {
 });
 after(async () => { await browser?.close(); await server?.close(); await inertServer?.close(); });
 
-async function open(t, url = baseUrl, mobile = false) {
+async function open(t, url = baseUrl, mobile = false, fixtureSettings = {}) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 } });
   context.setDefaultTimeout(8000);
   await context.route('https://**/*', route => route.abort());
+  await context.addInitScript(settings => { window.__riskbriefFixtureSettings = settings; }, fixtureSettings);
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); });
@@ -76,6 +77,10 @@ test('browser fixture completes analyst analysis, Gemini validation, save, retri
   const options = await page.evaluate(() => window.__riskbriefFixture.modelOptions);
   assert.equal(options.options.timeout, 20000);
   assert.equal(options.params.generationConfig.maxOutputTokens, 400);
+  assert.deepEqual(await page.evaluate(() => window.__riskbriefFixture.aiOptions), {
+    useLimitedUseAppCheckTokens: true, backend: 'GoogleAIBackend',
+  });
+  assert.deepEqual(await page.evaluate(() => window.__riskbriefFixture.initializationOrder), ['app-check', 'ai']);
   await page.locator('#logout-button').click();
   await login(page, 'trusted-reviewer');
   await page.locator('#review-panel').waitFor({ state: 'visible' });
@@ -83,6 +88,26 @@ test('browser fixture completes analyst analysis, Gemini validation, save, retri
   await page.waitForFunction(() => document.querySelector('#brief-list').textContent.includes('APPROVED'));
   assert.match(await page.locator('#audit-list').textContent(), /REVIEW_DECIDED/);
   assert.deepEqual(errors, []);
+});
+
+test('App Check or AI initialization failure blocks model calls without breaking approved login and deterministic analysis', { timeout: 30000 }, async t => {
+  for (const initializationFailure of ['app-check', 'ai', 'model']) {
+    const page = await open(t, baseUrl, false, { initializationFailure });
+    await login(page, 'analyst-one');
+    await analyze(page);
+    assert.equal(await page.locator('#workspace').isVisible(), true);
+    assert.equal(await page.locator('#gemini-button').isDisabled(), true);
+    assert.equal(await page.locator('#save-button').isDisabled(), true);
+    assert.match(await page.locator('#provider-status').textContent(), /FIREBASE CONFIGURED.*AI BLOCKED/);
+    assert.match(await page.locator('#ai-result').textContent(), /Gemini is unavailable/);
+    assert.equal(await page.evaluate(() => window.__riskbriefFixture.calls), 0);
+    assert.equal(await page.evaluate(() => window.__riskbriefFixture.records.size), 0);
+    if (initializationFailure === 'app-check') {
+      assert.deepEqual(await page.evaluate(() => window.__riskbriefFixture.initializationOrder), ['app-check']);
+    }
+    await page.locator('#logout-button').click();
+    assert.equal(await page.locator('#workspace').isVisible(), false);
+  }
 });
 
 test('browser rejects fabricated Gemini evidence and invalid synthetic input without saving', { timeout: 30000 }, async t => {

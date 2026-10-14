@@ -132,3 +132,12 @@ server authorization for AI Logic or a trusted spending governor. App Check,
 free-tier model quota and provider-side abuse/access controls must be verified
 before enabling even the previously authorized bounded real-model test. No Blaze,
 paid Gemini, Functions, Cloud Run, App Hosting or other paid fallback is permitted.
+
+## October 14 follow-up
+
+The owner reports Developer API **VALID** in Console. The workspace still has
+zero authenticated Google accounts and no SDK/App Check configuration. AI Logic
+now uses limited-use App Check tokens, and initialization errors block only AI.
+All local regressions were rerun: **48 passed, 0 failed, 0 skipped**. This
+supersedes the local test count above without changing its historical results;
+live inference remains unverified. See [GEMINI_INTEGRATION_CHECK.md](GEMINI_INTEGRATION_CHECK.md).

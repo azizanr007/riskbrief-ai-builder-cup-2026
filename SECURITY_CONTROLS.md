@@ -23,3 +23,11 @@ Release fixes on October 13: correct the missing AI-status DOM ID; require activ
 Google authentication may create an Auth identity; it does not approve workspace access. Server Firestore rules deny unapproved/revoked members and privilege self-assignment. The UI uses `getDocFromServer` for ACL checks before analysis, model requests, saving, review and refresh, and clears private state on denial. Google popup cancellation/domain/network errors expose generic messages, never OAuth credentials. The CSP allows only the two target Firebase Auth helper origins in addition to reCAPTCHA frames. Actual Google authorized domains and popup behavior still require live configuration/testing.
 
 Firestore workspace membership does not itself implement an AI Logic per-user server authorization or trusted spending governor. Browser ACL checks can be bypassed by modified clients. App Check, verified quota/abuse controls and any required provider-side access restriction must be validated before live AI activation; this pass leaves AI disabled. The stronger Firestore shape/bounds validators do not recompute arithmetic or prove a genuine model response. Production Auth revocation/email-enumeration protection and session expiry policy require live project verification; SDK sign-out does not invalidate every previously issued ID token.
+
+October 14: AI Logic requests `useLimitedUseAppCheckTokens: true` using the
+official SDK's limited-use-token path. This prepares for replay-protection
+enforcement; it does not prove that the live project enforces it or that actual
+attestation is valid. App Check/AI/model initialization failures keep the model
+unavailable while preserving independently permitted login and deterministic
+analysis. No fallback backend or App Check bypass is used. See the current
+[Gemini verification evidence](GEMINI_INTEGRATION_CHECK.md).

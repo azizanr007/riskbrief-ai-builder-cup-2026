@@ -75,3 +75,7 @@ The independent competition repository is public at https://github.com/azizanr00
 ## Firebase agent skills
 
 For Firebase work, read the relevant official skills installed with `npx skills add firebase/agent-skills --agent=codex --yes`. Installation of 13 skills was verified with `npx skills list --agent codex`; these instructions do not authenticate Google or activate any Firebase service. `AGENTS.md` records this working convention; `skills-lock.json` records upstream non-secret source hashes.
+
+## October 14 Gemini integration check
+
+The existing `gemini-3.5-flash-lite` remains listed as stable/billing-not-required in current official Firebase documentation. AI Logic now requests limited-use App Check tokens for replay-protection compatibility. App Check or AI initialization failure blocks AI without disabling otherwise authorized login and deterministic analysis. Actual project enforcement, Spark/quota and a genuine invocation are still unverified: the workspace has zero authenticated Google accounts and no populated SDK/App Check configuration. Final regressions: 48 passed, 0 failed, 0 skipped; build/audit and production mobile/desktop smoke passed. See [the exact Gemini check](GEMINI_INTEGRATION_CHECK.md) for results and the live-access blocker. No production mock fallback or paid backend was added.

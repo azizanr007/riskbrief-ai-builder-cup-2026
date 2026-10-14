@@ -29,6 +29,7 @@ let app = null;
 let auth = null;
 let db = null;
 let model = null;
+let aiSetupState = 'AI DISABLED';
 let authReady = false;
 let authBusy = false;
 let currentUser = null;
@@ -142,30 +143,47 @@ async function setupFirebase() {
     db = getFirestore(app);
     // Shared-device friendly: the official SDK retains login only for this tab session.
     await setPersistence(auth, browserSessionPersistence);
+    let appCheckInitialized = false;
     if (siteKey && !siteKey.startsWith('REPLACE_')) {
-      initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(siteKey), isTokenAutoRefreshEnabled: true });
+      try {
+        initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(siteKey), isTokenAutoRefreshEnabled: true });
+        appCheckInitialized = true;
+      } catch {
+        aiSetupState = 'AI BLOCKED: APP CHECK INITIALIZATION FAILED';
+      }
     }
-    if (aiEnabled) {
-      const ai = getAI(app, { backend: new GoogleAIBackend() });
-      const structuredResponse = Schema.object({
-        properties: {
-          findings: Schema.array({
-            items: Schema.object({
-              properties: {
-                evidenceId: Schema.string(),
-                findingCode: Schema.enumString({ enum: FINDING_CODES }),
-              },
+    if (aiEnabled && appCheckInitialized) {
+      try {
+        const ai = getAI(app, {
+          backend: new GoogleAIBackend(),
+          // Required when the project enforces App Check replay protection.
+          // This enables SDK token acquisition, not server enforcement by itself.
+          useLimitedUseAppCheckTokens: true,
+        });
+        const structuredResponse = Schema.object({
+          properties: {
+            findings: Schema.array({
+              items: Schema.object({
+                properties: {
+                  evidenceId: Schema.string(),
+                  findingCode: Schema.enumString({ enum: FINDING_CODES }),
+                },
+              }),
             }),
-          }),
-          uncertaintyCodes: Schema.array({ items: Schema.enumString({ enum: UNCERTAINTY_CODES }) }),
-        },
-      });
-      model = getGenerativeModel(ai, {
-        model: MODEL_NAME,
-        generationConfig: { responseMimeType: 'application/json', responseSchema: structuredResponse, maxOutputTokens: 400 },
-      }, { timeout: 20000 });
+            uncertaintyCodes: Schema.array({ items: Schema.enumString({ enum: UNCERTAINTY_CODES }) }),
+          },
+        });
+        model = getGenerativeModel(ai, {
+          model: MODEL_NAME,
+          generationConfig: { responseMimeType: 'application/json', responseSchema: structuredResponse, maxOutputTokens: 400 },
+        }, { timeout: 20000 });
+        aiSetupState = 'AI NOT YET VERIFIED';
+      } catch {
+        model = null;
+        aiSetupState = 'AI BLOCKED: INITIALIZATION FAILED';
+      }
     }
-    setProviderState(aiEnabled ? 'FIREBASE CONFIGURED · AI NOT YET VERIFIED' : 'FIREBASE CONFIGURED · AI DISABLED');
+    setProviderState('FIREBASE CONFIGURED · ' + aiSetupState);
     setMessage(authMessage, 'Sign in with an owner-provisioned Firebase Authentication account.');
     $('model-label').textContent = MODEL_NAME;
     authReady = true;
@@ -203,9 +221,11 @@ function resetAnalysis() {
   liveUsage = null;
   syncControls();
   $('deterministic-result').textContent = 'Submit an explicitly synthetic dataset to compute evidence.';
-  $('ai-result').textContent = aiEnabled ? 'No model call has been made.' : 'Gemini is disabled until Firebase AI Logic and enforced App Check are configured.';
+  $('ai-result').textContent = model ? 'No model call has been made.'
+    : aiSetupState.startsWith('AI BLOCKED') ? 'Gemini is unavailable. ' + aiSetupState + '.'
+    : 'Gemini is disabled until Firebase AI Logic and enforced App Check are configured.';
   $('sim-label').textContent = 'No verified model response is associated with this input.';
-  if (firebaseConfigured) setProviderState(aiEnabled ? 'FIREBASE CONFIGURED · AI NOT YET VERIFIED' : 'FIREBASE CONFIGURED · AI DISABLED');
+  if (firebaseConfigured) setProviderState('FIREBASE CONFIGURED · ' + aiSetupState);
   setMessage(saveState, 'Nothing saved.');
 }
 

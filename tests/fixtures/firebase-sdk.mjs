@@ -4,6 +4,8 @@ const state = window.__riskbriefFixture = {
   records: new Map(), callbacks: [], uid: null, calls: 0, counter: 0,
   aiScenario: 'valid', roleLookupFails: false, delayed: false, appInitializations: 0,
   googleUid: 'analyst-one', googleError: null, googleCalls: 0, emailError: false,
+  initializationFailure: window.__riskbriefFixtureSettings?.initializationFailure ?? null,
+  initializationOrder: [],
 };
 const reviewers = { 'trusted-reviewer': { active: true }, 'revoked-reviewer': { active: false } };
 const members = state.members = Object.fromEntries(
@@ -14,12 +16,21 @@ const timestamp = () => ({ toDate: () => new Date(0), toMillis: () => 0 });
 const snapshot = path => ({ id: path.split('/').at(-1), exists: () => state.records.has(path), data: () => state.records.get(path) });
 
 export const initializeApp = config => { state.appInitializations++; return { config }; };
-export const initializeAppCheck = () => {};
+export const initializeAppCheck = () => {
+  state.initializationOrder.push('app-check');
+  if (state.initializationFailure === 'app-check') throw new Error('Fixture App Check initialization failure');
+};
 export class ReCaptchaEnterpriseProvider { constructor(siteKey) { this.siteKey = siteKey; } }
 export class GoogleAIBackend {}
-export const getAI = () => ({});
+export const getAI = (_app, options) => {
+  state.initializationOrder.push('ai');
+  state.aiOptions = { useLimitedUseAppCheckTokens: options.useLimitedUseAppCheckTokens, backend: options.backend.constructor.name };
+  if (state.initializationFailure === 'ai') throw new Error('Fixture AI initialization failure');
+  return {};
+};
 export const Schema = Object.fromEntries(['object', 'array', 'string', 'enumString'].map(key => [key, options => ({ key, ...options })]));
 export function getGenerativeModel(_ai, params, options) {
+  if (state.initializationFailure === 'model') throw new Error('Fixture model initialization failure');
   state.modelOptions = { params, options };
   return { async generateContent() {
     state.calls++;
